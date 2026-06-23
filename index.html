@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Phantom Door</title>
+  <style>
+    /* ── Design tokens ── */
+    :root {
+      --bg:        #09090b;
+      --surface:   #111113;
+      --card:      #18181b;
+      --border:    #27272a;
+      --border-hi: #3f3f46;
+      --accent:    #7c3aed;
+      --accent-hi: #a855f7;
+      --accent-lo: #1e1030;
+      --green:     #22c55e;
+      --green-lo:  #0d2618;
+      --red:       #ef4444;
+      --red-lo:    #2b0d0d;
+      --amber:     #f59e0b;
+      --amber-lo:  #271a05;
+      --text:      #e4e4e7;
+      --muted:     #71717a;
+      --sub:       #52525b;
+      --radius:    12px;
+      --radius-sm: 8px;
+      --font:      -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.5;
+      min-height: 100vh;
+      padding-bottom: 100px; /* space for bottom nav on mobile */
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(9,9,11,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 17px;
+      letter-spacing: -0.3px;
+    }
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .conn-badge {
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.3s;
+    }
+    .conn-badge.live   { background: var(--green-lo); color: var(--green); border: 1px solid #166534; }
+    .conn-badge.offline{ background: var(--red-lo);   color: var(--red);   border: 1px solid #7f1d1d; }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── IP config bar ── */
+    .ip-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .ip-bar label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .ip-bar input {
+      flex: 1;
+      min-width: 160px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      outline: none;
+    }
+    .ip-bar input:focus { border-color: var(--accent); }
+    .btn-connect {
+      padding: 6px 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-connect:hover { background: var(--accent-hi); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      gap: 4px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab.active { color: var(--accent-hi); border-bottom-color: var(--accent); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* ── Panels ── */
+    .panel { display: none; padding: 20px; max-width: 640px; margin: 0 auto; }
+    .panel.active { display: block; }
+
+    /* ── Door status card ── */
+    .door-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      text-align: center;
+      margin-bottom: 16px;
+      transition: border-color 0.3s, background 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .door-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+    }
+    .door-card.unlocked::before { background: radial-gradient(ellipse at center, rgba(34,197,94,0.06) 0%, transparent 70%); opacity: 1; }
+    .door-card.locked::before   { background: radial-gradient(ellipse at center, rgba(124,58,237,0.04) 0%, transparent 70%); opacity: 1; }
+    .door-card.lockout::before  { background: radial-gradient(ellipse at center, rgba(239,68,68,0.08) 0%, transparent 70%); opacity: 1; }
+
+    .door-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      display: block;
+      filter: none;
+      transition: transform 0.3s;
+    }
+    .door-card.unlocked .door-icon { transform: translateY(-2px); }
+
+    .door-status-text {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+      transition: color 0.3s;
+    }
+    .door-card.locked    .door-status-text { color: var(--accent-hi); }
+    .door-card.unlocked  .door-status-text { color: var(--green); }
+    .door-card.lockout   .door-status-text { color: var(--red); }
+    .door-card.enrolling .door-status-text { color: var(--amber); }
+
+    .door-sub { color: var(--muted); font-size: 13px; }
+
+    .timer-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 18px;
+      overflow: hidden;
+      display: none;
+    }
+    .timer-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 2px;
+      width: 100%;
+      transition: width 0.2s linear;
+    }
+
+    /* ── Remote unlock button ── */
+    .btn-unlock {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: -0.2px;
+      transition: background 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-unlock:active { transform: scale(0.98); background: var(--accent-hi); }
+    .btn-unlock:disabled { background: var(--sub); cursor: not-allowed; transform: none; }
+    .btn-unlock::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.05);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .btn-unlock:hover:not(:disabled)::after { opacity: 1; }
+
+    /* ── Stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+    .stat-val {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    .stat-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    /* ── Access log ── */
+    .log-list { display: flex; flex-direction: column; gap: 6px; }
+    .log-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .log-badge {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .log-badge.ok  { background: var(--green-lo);  color: var(--green); }
+    .log-badge.bad { background: var(--red-lo);    color: var(--red); }
+    .log-name { font-weight: 500; font-size: 14px; }
+    .log-time { color: var(--muted); font-size: 12px; margin-left: auto; }
+
+    /* ── Users panel ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title { font-size: 15px; font-weight: 600; }
+    .btn-sm {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid;
+      transition: background 0.15s;
+    }
+    .btn-primary { background: var(--accent-lo); color: var(--accent-hi); border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent); color: #fff; }
+    .btn-danger  { background: var(--red-lo);    color: var(--red);       border-color: var(--red); }
+    .btn-danger:hover  { background: var(--red); color: #fff; }
+
+    .user-list { display: flex; flex-direction: column; gap: 8px; }
+    .user-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-avatar {
+      width: 36px; height: 36px;
+      background: var(--accent-lo);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      color: var(--accent-hi);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .user-info { flex: 1; }
+    .user-name { font-weight: 500; font-size: 14px; }
+    .user-slot { color: var(--muted); font-size: 11px; }
+    .btn-del {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--muted);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-del:hover { border-color: var(--red); color: var(--red); background: var(--red-lo); }
+
+    /* ── Enroll panel ── */
+    .enroll-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-group input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+
+    .enroll-steps {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .enroll-step {
+      flex: 1;
+      padding: 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      transition: all 0.3s;
+    }
+    .enroll-step.active { background: var(--accent-lo); border-color: var(--accent); color: var(--accent-hi); }
+    .enroll-step.done   { background: var(--green-lo);  border-color: var(--green);  color: var(--green); }
+    .step-num { font-size: 20px; display: block; margin-bottom: 2px; }
+
+    .enroll-status {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .enroll-status.info    { background: var(--accent-lo); color: var(--accent-hi); border: 1px solid #3b1f6f; display: block; }
+    .enroll-status.success { background: var(--green-lo);  color: var(--green);     border: 1px solid #166534; display: block; }
+    .enroll-status.error   { background: var(--red-lo);    color: var(--red);       border: 1px solid #7f1d1d; display: block; }
+
+    /* ── Settings panel ── */
+    .settings-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .setting-row {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 14px; font-weight: 500; }
+    .setting-sub   { color: var(--muted); font-size: 12px; margin-top: 1px; }
+
+    /* ── Toast notifications ── */
+    #toast-container {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      width: min(360px, 90vw);
+    }
+    .toast {
+      padding: 11px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      animation: toastIn 0.25s ease, toastOut 0.25s ease 2.5s forwards;
+      pointer-events: auto;
+    }
+    .toast.success { background: #14532d; color: var(--green); border: 1px solid #166534; }
+    .toast.error   { background: #450a0a; color: var(--red);   border: 1px solid #7f1d1d; }
+    .toast.info    { background: #1e1030; color: var(--accent-hi); border: 1px solid #3b1f6f; }
+    @keyframes toastIn  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { to   { opacity: 0; transform: translateY(-6px); } }
+
+    /* ── Alert strip ── */
+    .alert-strip {
+      background: var(--red-lo);
+      border-bottom: 1px solid var(--red);
+      color: var(--red);
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+      animation: alertPulse 1s ease infinite;
+    }
+    .alert-strip.show { display: block; }
+    @keyframes alertPulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      .panel { padding: 14px; }
+      .door-card { padding: 22px 16px; }
+      .stats-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .btn-unlock { padding: 14px; font-size: 15px; }
+    }
+
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--card) 25%, var(--border) 50%, var(--card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+      border-radius: var(--radius-sm);
+      height: 14px;
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">🔒</div>
+    Phantom Door
+  </div>
+  <div class="conn-badge offline" id="connBadge">
+    <div class="dot"></div>
+    <span id="connText">Offline</span>
+  </div>
+</div>
+
+<!-- IP Configuration Bar -->
+<div class="ip-bar">
+  <label>ESP32 IP:</label>
+  <input type="text" id="espIP" placeholder="192.168.1.100" />
+  <button class="btn-connect" onclick="connectToESP()">Connect</button>
+</div>
+
+<!-- Lockout Alert -->
+<div class="alert-strip" id="alertStrip">
+  ⚠ SECURITY ALERT — 3 failed attempts. Sensor locked for 30s.
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="showTab('dashboard')">Dashboard</div>
+  <div class="tab" onclick="showTab('users')">Users</div>
+  <div class="tab" onclick="showTab('enroll')">+ Enroll</div>
+  <div class="tab" onclick="showTab('log')">Activity</div>
+  <div class="tab" onclick="showTab('settings')">Settings</div>
+</div>
+
+<!-- ── DASHBOARD PANEL ── -->
+<div class="panel active" id="panel-dashboard">
+
+  <div class="door-card locked" id="doorCard">
+    <span class="door-icon" id="doorIcon">🔒</span>
+    <div class="door-status-text" id="doorStatusText">Secured</div>
+    <div class="door-sub" id="doorSub">Fingerprint required</div>
+    <div class="timer-bar" id="timerBar">
+      <div class="timer-fill" id="timerFill"></div>
+    </div>
+  </div>
+
+  <button class="btn-unlock" id="btnUnlock" onclick="remoteUnlock()">
+    🔓 Remote Unlock
+  </button>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-val" id="statUsers">—</div>
+      <div class="stat-label">Enrolled users</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statFails">—</div>
+      <div class="stat-label">Failed attempts</div>
+    </div>
+  </div>
+
+  <div class="section-header" style="margin-top:4px">
+    <span class="section-title">Recent activity</span>
+    <span style="color:var(--muted);font-size:12px" id="recentLabel">–</span>
+  </div>
+  <div class="log-list" id="recentLog">
+    <div class="empty-state"><div class="empty-icon">📋</div>No events yet</div>
+  </div>
+</div>
+
+<!-- ── USERS PANEL ── -->
+<div class="panel" id="panel-users">
+  <div class="section-header">
+    <span class="section-title">Enrolled users</span>
+    <button class="btn-sm btn-primary" onclick="loadUsers()">↻ Refresh</button>
+  </div>
+  <div class="user-list" id="userList">
+    <div class="empty-state"><div class="empty-icon">👥</div>Loading...</div>
+  </div>
+</div>
+
+<!-- ── ENROLL PANEL ── -->
+<div class="panel" id="panel-enroll">
+  <div class="enroll-card">
+    <h2 style="font-size:16px;font-weight:600;margin-bottom:4px">Enroll new user</h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Enter a name, tap Enroll, then place finger on the sensor twice.</p>
+
+    <div class="enroll-steps">
+      <div class="enroll-step" id="step1">
+        <span class="step-num">☝️</span>
+        First scan
+      </div>
+      <div class="enroll-step" id="step2">
+        <span class="step-num">✌️</span>
+        Lift & rescan
+      </div>
+      <div class="enroll-step" id="step3">
+        <span class="step-num">✅</span>
+        Saved
+      </div>
+    </div>
+
+    <div class="enroll-status" id="enrollStatus"></div>
+
+    <div class="form-group">
+      <label>Person's name</label>
+      <input type="text" id="enrollName" placeholder="e.g. Faysal" maxlength="32" />
+    </div>
+
+    <button class="btn-unlock" id="btnEnroll" onclick="startEnroll()">
+      📡 Start enrollment
+    </button>
+  </div>
+</div>
+
+<!-- ── ACTIVITY LOG PANEL ── -->
+<div class="panel" id="panel-log">
+  <div class="section-header">
+    <span class="section-title">Access log</span>
+    <span style="color:var(--muted);font-size:12px">Last 20 events</span>
+  </div>
+  <div class="log-list" id="fullLog">
+    <div class="empty-state"><div class="empty-icon">📋</div>No events yet</div>
+  </div>
+</div>
+
+<!-- ── SETTINGS PANEL ── -->
+<div class="panel" id="panel-settings">
+  <div class="settings-card">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">ESP32 address</div>
+        <div class="setting-sub" id="settingsIP">Not connected</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">WebSocket</div>
+        <div class="setting-sub" id="settingsWS">Disconnected</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Sensor capacity</div>
+        <div class="setting-sub">127 fingerprints max</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Unlock hold time</div>
+        <div class="setting-sub">4 seconds (configured in firmware)</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Security lockout</div>
+        <div class="setting-sub">3 failed attempts → 30 second lockout</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Servo technique</div>
+        <div class="setting-sub">Overshoot + soft-start ramp (no jitter)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-card">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">GitHub Pages URL</div>
+        <div class="setting-sub">Bookmark this page and set your IP once</div>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Port mapping</div>
+        <div class="setting-sub">HTTP API :80 · WebSocket :81</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;text-align:center;color:var(--sub);font-size:12px">
+    Phantom Door v1.0 · ESP32 + R307 + SG90
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────
+let espIP    = '';
+let ws       = null;
+let logItems = [];
+let timerInterval = null;
+let unlockStart   = 0;
+const UNLOCK_MS   = 4000;
+
+// ── Restore saved IP from localStorage ───────────────────────────
+const savedIP = localStorage.getItem('phantomIP');
+if (savedIP) {
+  document.getElementById('espIP').value = savedIP;
+}
+
+// Check URL param ?ip= for direct linking
+const urlIP = new URLSearchParams(window.location.search).get('ip');
+if (urlIP) {
+  document.getElementById('espIP').value = urlIP;
+  connectToESP();
+}
+
+// ── Tab Navigation ───────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const tabs = ['dashboard','users','enroll','log','settings'];
+  document.querySelectorAll('.tab')[tabs.indexOf(name)].classList.add('active');
+  if (name === 'users') loadUsers();
+}
+
+// ── Connect to ESP32 ─────────────────────────────────────────────
+function connectToESP() {
+  const ip = document.getElementById('espIP').value.trim();
+  if (!ip) return toast('Enter an IP address', 'error');
+
+  espIP = ip;
+  localStorage.setItem('phantomIP', ip);
+  document.getElementById('settingsIP').textContent = 'http://' + ip;
+
+  // Close previous WS
+  if (ws) { ws.close(); ws = null; }
+
+  // HTTP status check
+  fetchStatus();
+
+  // Open WebSocket
+  openWS();
+}
+
+function openWS() {
+  if (!espIP) return;
+  ws = new WebSocket('ws://' + espIP + ':81');
+  ws.onopen = () => {
+    setConnected(true);
+    document.getElementById('settingsWS').textContent = 'Connected to ws://' + espIP + ':81';
+    toast('Connected to Phantom Door', 'success');
+  };
+  ws.onclose = () => {
+    setConnected(false);
+    document.getElementById('settingsWS').textContent = 'Disconnected — retrying...';
+    setTimeout(() => { if (espIP) openWS(); }, 3000);
+  };
+  ws.onerror = () => setConnected(false);
+  ws.onmessage = e => handleWS(e.data);
+}
+
+function setConnected(ok) {
+  const badge = document.getElementById('connBadge');
+  const text  = document.getElementById('connText');
+  badge.className = 'conn-badge ' + (ok ? 'live' : 'offline');
+  text.textContent = ok ? 'Live' : 'Offline';
+}
+
+// ── Handle WebSocket messages ─────────────────────────────────────
+function handleWS(raw) {
+  let d;
+  try { d = JSON.parse(raw); } catch { return; }
+
+  // Enrollment progress
+  if (d.enrollStatus !== undefined) {
+    updateEnrollUI(d);
+    return;
+  }
+
+  // Security alert
+  if (d.alert) {
+    document.getElementById('alertStrip').classList.add('show');
+    setTimeout(() => document.getElementById('alertStrip').classList.remove('show'), 10000);
+    toast(d.alert, 'error');
+    return;
+  }
+
+  // Main status update
+  if (d.state) {
+    applyState(d);
+  }
+}
+
+function applyState(d) {
+  const card = document.getElementById('doorCard');
+  const icon = document.getElementById('doorIcon');
+  const text = document.getElementById('doorStatusText');
+  const sub  = document.getElementById('doorSub');
+  const bar  = document.getElementById('timerBar');
+
+  card.className = 'door-card ' + d.state;
+
+  if (d.state === 'unlocked') {
+    icon.textContent = '🔓';
+    text.textContent = 'Unlocked';
+    sub.textContent  = 'Door is open — auto-relocking soon';
+    bar.style.display = 'block';
+    startTimer();
+  } else if (d.state === 'lockout') {
+    icon.textContent = '🚨';
+    text.textContent = 'LOCKOUT';
+    sub.textContent  = 'Too many failed attempts — wait 30s';
+    bar.style.display = 'none';
+    stopTimer();
+    document.getElementById('alertStrip').classList.add('show');
+  } else if (d.state === 'enrolling') {
+    icon.textContent = '📡';
+    text.textContent = 'Enrolling…';
+    sub.textContent  = 'Place finger on sensor';
+    bar.style.display = 'none';
+    stopTimer();
+  } else {
+    icon.textContent = '🔒';
+    text.textContent = 'Secured';
+    sub.textContent  = 'Fingerprint required';
+    bar.style.display = 'none';
+    stopTimer();
+    document.getElementById('alertStrip').classList.remove('show');
+  }
+
+  if (d.enrollCount !== undefined) document.getElementById('statUsers').textContent = d.enrollCount;
+  if (d.failCount   !== undefined) document.getElementById('statFails').textContent = d.failCount;
+
+  if (d.recentLog && d.recentLog.length) {
+    renderLog(d.recentLog, 'recentLog');
+    renderLog(d.recentLog, 'fullLog');
+    document.getElementById('recentLabel').textContent = d.recentLog.length + ' events';
+  }
+}
+
+// ── Timer bar for unlock hold ─────────────────────────────────────
+function startTimer() {
+  stopTimer();
+  unlockStart = Date.now();
+  const fill = document.getElementById('timerFill');
+  timerInterval = setInterval(() => {
+    const elapsed = Date.now() - unlockStart;
+    const pct = Math.max(0, 100 - (elapsed / UNLOCK_MS * 100));
+    fill.style.width = pct + '%';
+    if (pct === 0) stopTimer();
+  }, 50);
+}
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  document.getElementById('timerFill').style.width = '100%';
+}
+
+// ── Fetch status over HTTP ────────────────────────────────────────
+async function fetchStatus() {
+  if (!espIP) return;
+  try {
+    const res = await fetch('http://' + espIP + '/status');
+    const d = await res.json();
+    applyState({ state: d.state, enrollCount: d.count, failCount: d.failAttempts });
+  } catch (e) {
+    setConnected(false);
+  }
+}
+
+// ── Remote Unlock ─────────────────────────────────────────────────
+async function remoteUnlock() {
+  if (!espIP) return toast('Not connected', 'error');
+  const btn = document.getElementById('btnUnlock');
+  btn.disabled = true;
+  btn.textContent = '⏳ Unlocking…';
+  try {
+    const res = await fetch('http://' + espIP + '/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ who: 'Remote (Web)' })
+    });
+    const d = await res.json();
+    if (d.ok) toast('Door unlocked remotely!', 'success');
+    else toast('Failed to unlock', 'error');
+  } catch {
+    toast('Cannot reach ESP32', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔓 Remote Unlock';
+  }
+}
+
+// ── Load Users ────────────────────────────────────────────────────
+async function loadUsers() {
+  if (!espIP) { return; }
+  const list = document.getElementById('userList');
+  list.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div>Loading...</div>';
+  try {
+    const res = await fetch('http://' + espIP + '/users');
+    const d = await res.json();
+    if (!d.users || d.users.length === 0) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div>No users enrolled</div>';
+      return;
+    }
+    list.innerHTML = '';
+    d.users.forEach(u => {
+      const initials = (u.name || 'U').charAt(0).toUpperCase();
+      const el = document.createElement('div');
+      el.className = 'user-card';
+      el.innerHTML = `
+        <div class="user-avatar">${initials}</div>
+        <div class="user-info">
+          <div class="user-name">${u.name}</div>
+          <div class="user-slot">Slot #${u.slot}</div>
+        </div>
+        <button class="btn-del" onclick="deleteUser(${u.slot}, '${u.name}')">Remove</button>
+      `;
+      list.appendChild(el);
+    });
+    document.getElementById('statUsers').textContent = d.users.length;
+  } catch {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div>Cannot reach ESP32</div>';
+  }
+}
+
+async function deleteUser(slot, name) {
+  if (!confirm(`Remove "${name}" (slot ${slot})? This cannot be undone.`)) return;
+  try {
+    const res = await fetch('http://' + espIP + '/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      toast(`${name} removed`, 'success');
+      loadUsers();
+    } else {
+      toast('Delete failed', 'error');
+    }
+  } catch {
+    toast('Cannot reach ESP32', 'error');
+  }
+}
+
+// ── Enrollment ────────────────────────────────────────────────────
+async function startEnroll() {
+  if (!espIP) return toast('Not connected', 'error');
+  const name = document.getElementById('enrollName').value.trim();
+  if (!name) return toast('Enter a name first', 'error');
+
+  // Reset UI
+  [1,2,3].forEach(i => {
+    document.getElementById('step'+i).className = 'enroll-step';
+  });
+  setEnrollStatus('Sending enroll request…', 'info');
+
+  document.getElementById('step1').className = 'enroll-step active';
+  document.getElementById('btnEnroll').disabled = true;
+  document.getElementById('btnEnroll').textContent = '⏳ Enrolling…';
+
+  try {
+    const res = await fetch('http://' + espIP + '/enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const d = await res.json();
+    if (!d.ok) {
+      setEnrollStatus(d.error || 'Error', 'error');
+      resetEnrollBtn();
+    } else {
+      setEnrollStatus('Place your finger firmly on the sensor now…', 'info');
+    }
+  } catch {
+    setEnrollStatus('Cannot reach ESP32', 'error');
+    resetEnrollBtn();
+  }
+}
+
+function updateEnrollUI(d) {
+  if (d.step === 0) {
+    setEnrollStatus(d.enrollStatus, 'error');
+    resetEnrollBtn();
+    [1,2,3].forEach(i => document.getElementById('step'+i).className = 'enroll-step');
+  } else if (d.step === 1) {
+    setEnrollStatus(d.enrollStatus, 'info');
+    document.getElementById('step1').className = 'enroll-step active';
+  } else if (d.step === 2) {
+    setEnrollStatus(d.enrollStatus, 'info');
+    document.getElementById('step1').className = 'enroll-step done';
+    document.getElementById('step2').className = 'enroll-step active';
+  } else if (d.step === 3 && d.success) {
+    setEnrollStatus(d.enrollStatus, 'success');
+    document.getElementById('step1').className = 'enroll-step done';
+    document.getElementById('step2').className = 'enroll-step done';
+    document.getElementById('step3').className = 'enroll-step done';
+    toast('User enrolled!', 'success');
+    document.getElementById('enrollName').value = '';
+    resetEnrollBtn();
+    loadUsers();
+  }
+}
+
+function setEnrollStatus(msg, type) {
+  const el = document.getElementById('enrollStatus');
+  el.textContent = msg;
+  el.className = 'enroll-status ' + type;
+}
+
+function resetEnrollBtn() {
+  const btn = document.getElementById('btnEnroll');
+  btn.disabled = false;
+  btn.innerHTML = '📡 Start enrollment';
+}
+
+// ── Render log ────────────────────────────────────────────────────
+function renderLog(items, containerId) {
+  const el = document.getElementById(containerId);
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>No events yet</div>';
+    return;
+  }
+  el.innerHTML = '';
+  items.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'log-item';
+    div.innerHTML = `
+      <div class="log-badge ${item.success ? 'ok' : 'bad'}">${item.success ? '✓' : '✗'}</div>
+      <div>
+        <div class="log-name">${item.name}</div>
+        <div style="color:var(--muted);font-size:12px">${item.success ? 'Access granted' : 'Access denied'}</div>
+      </div>
+      <div class="log-time">#${items.length - idx}</div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+// ── Toast notifications ───────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ── Ping ESP32 every 10s to keep alive ───────────────────────────
+setInterval(() => {
+  if (espIP && (!ws || ws.readyState !== WebSocket.OPEN)) {
+    openWS();
+  } else if (espIP) {
+    fetchStatus();
+  }
+}, 10000);
+</script>
+</body>
+</html>
